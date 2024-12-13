@@ -56,6 +56,13 @@ const renameTypescriptVariables = (source: string, variablesMap: Map<string, str
   return updatedCode
 }
 
+/**
+ * This code is responsible for:
+ * * Sanitizing imports from 'drizzle-orm/*' to '@payloadcms/package-name/drizzle/*'
+ * * Sanitizing generated variables for tables to match what payload.db.drizzle actually has
+ * * Workaround for point field with default value, Drizzle does not generate it properly for some reason.
+ * * Generating the final output with all imports, schema type achieved through all `exports` and declaration for package.
+ */
 const formatSchemaFile = (packageName: string, content: string) => {
   let formatted = ''
 
@@ -138,6 +145,12 @@ declare module "${packageName}/types" {
   )
 }
 
+/**
+ * * Returns method that uses Drizzle CLI pull command to generate output schema.
+ * * Builds dynamically needed for CLI config https://orm.drizzle.team/docs/drizzle-config-file
+ * * Uses temporary directory for calling the CLI.
+ * * Saves the final output, either to defaultOutputFile or current working directory.
+ */
 export const createSchemaGenerator = ({
   dbCredentials,
   defaultOutputFile,
@@ -188,16 +201,9 @@ ${Object.entries(dbCredentials)
 
     await writeFile(drizzleConfigPath, drizzleConfig, 'utf-8')
 
-    try {
-      execSync(`node ${drizzleBinPath} pull --config=${drizzleConfigPath}`, {
-        stdio: 'inherit',
-      })
-    } catch (e) {
-      this.payload.logger.error(e)
-      throw e
-    }
-
-    this.payload.logger.info('Post processing...')
+    execSync(`node ${drizzleBinPath} pull --config=${drizzleConfigPath}`, {
+      stdio: 'inherit',
+    })
 
     const [schema] = await Promise.all([
       readFile(path.resolve(tempDir, 'schema.ts'), 'utf-8'),
