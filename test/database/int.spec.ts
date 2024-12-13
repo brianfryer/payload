@@ -10,7 +10,7 @@ import {
 } from '@payloadcms/db-mongodb/migration-utils'
 import * as drizzlePg from 'drizzle-orm/pg-core'
 import * as drizzleSqlite from 'drizzle-orm/sqlite-core'
-import fs from 'fs'
+import fs, { existsSync, rmSync } from 'fs'
 import { Types } from 'mongoose'
 import path from 'path'
 import {
@@ -1108,5 +1108,21 @@ describe('database', () => {
 
     // Should stay the same ID
     expect(postShouldCreated.id).toBe(postShouldUpdated.id)
+  })
+
+  describe('Schema generation', () => {
+    it('should generate schema', async () => {
+      // eslint-disable-next-line jest/no-conditional-in-test
+      if (payload.db.name !== 'postgres') {
+        return
+      }
+
+      const outputFile = path.resolve(dirname, 'generated-database-schema.ts')
+      await payload.db.generateSchema({ outputFile })
+
+      expect(existsSync(outputFile)).toBeTruthy()
+
+      rmSync(outputFile)
+    })
   })
 })
