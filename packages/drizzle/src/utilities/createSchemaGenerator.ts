@@ -6,6 +6,7 @@ import { mkdir, readFile, rm, writeFile } from 'fs/promises'
 import { createRequire } from 'module'
 import os from 'os'
 import path from 'path'
+import ts from 'typescript'
 import { v4 as uuid } from 'uuid'
 
 import type { DrizzleAdapter } from '../types.js'
@@ -18,11 +19,50 @@ const drizzleKitPath = require.resolve('drizzle-kit')
 
 const drizzleBinPath = path.resolve(path.dirname(drizzleKitPath), 'bin.cjs')
 
+/**
+ * Does something similar to your code editor on F2.
+ */
+const renameTypescriptVariables = (source: string, variablesMap: Map<string, string>): string => {
+  const sourceFile = ts.createSourceFile(
+    'temp.ts',
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  )
+
+  const transformer = <T extends ts.Node>(context: ts.TransformationContext) => {
+    const visit = (node: ts.Node): ts.Node => {
+      // Check if the node is an identifier and matches the oldName
+      if (ts.isIdentifier(node)) {
+        const newName = variablesMap.get(node.text)
+        if (newName) {
+          return ts.factory.createIdentifier(newName)
+        }
+      }
+
+      return ts.visitEachChild(node, visit, context)
+    }
+
+    return (node: T) => ts.visitNode(node, visit)
+  }
+
+  const result = ts.transform(sourceFile, [transformer])
+  const printer = ts.createPrinter()
+
+  const transformedSourceFile = result.transformed[0] as ts.SourceFile
+  const updatedCode = printer.printFile(transformedSourceFile)
+
+  return updatedCode
+}
+
 const formatSchemaFile = (packageName: string, content: string) => {
   let formatted = ''
 
   const imports = []
   const exports = []
+
+  const renameVariablesMap = new Map<string, string>()
 
   for (const line of content.split('\n')) {
     if (line.trim().startsWith('import')) {
@@ -36,8 +76,25 @@ const formatSchemaFile = (packageName: string, content: string) => {
 
     // collect all exports to include to declaration later
     if (line.startsWith('export const')) {
+      let tableName: null | string = null
+
+      if (line.includes('Table(')) {
+        const [_, afterTable] = line.split(`Table("`)
+        ;[tableName] = afterTable.split('"')
+      } else if (line.includes('table(')) {
+        const [_, afterTable] = line.split(`table("`)
+        ;[tableName] = afterTable.split('"')
+      }
+
       const [_, afterExport] = line.split('export const ')
-      const [exportName] = afterExport.split(' =')
+      let [exportName] = afterExport.split(' =')
+
+      if (tableName) {
+        renameVariablesMap.set(exportName, tableName)
+
+        exportName = tableName
+      }
+
       exports.push(exportName)
     }
 
@@ -54,7 +111,8 @@ const formatSchemaFile = (packageName: string, content: string) => {
     formatted += `${formattedLine}\n`
   }
 
-  return `
+  return renameTypescriptVariables(
+    `
 /* tslint:disable */
 /* eslint-disable */
 /**
@@ -75,7 +133,9 @@ declare module "${packageName}/types" {
     }
 }
 
-`
+`,
+    renameVariablesMap,
+  )
 }
 
 export const createSchemaGenerator = ({
@@ -139,9 +199,13 @@ ${Object.entries(dbCredentials)
 
     this.payload.logger.info('Post processing...')
 
-    const [schema, relationships] = await Promise.all([
+    const [schema] = await Promise.all([
       readFile(path.resolve(tempDir, 'schema.ts'), 'utf-8'),
-      readFile(path.resolve(tempDir, 'relations.ts'), 'utf-8'),
+      /**
+       * TODO: revise how we should handle relationships when names are completely different from what drizzle generates and what our "in memory" drizzle has.
+       * With tables we name them in formatSchemaFile
+       */
+      // readFile(path.resolve(tempDir, 'relations.ts'), 'utf-8'),
     ])
 
     await rm(tempDir, { force: true, recursive: true })
@@ -150,8 +214,6 @@ ${Object.entries(dbCredentials)
       this.packageName,
       `
 ${schema}
-
-${relationships}
 `,
     )
 

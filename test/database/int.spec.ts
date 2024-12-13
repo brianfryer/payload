@@ -11,6 +11,7 @@ import {
 import * as drizzlePg from 'drizzle-orm/pg-core'
 import * as drizzleSqlite from 'drizzle-orm/sqlite-core'
 import fs, { existsSync, rmSync } from 'fs'
+import { createRequire } from 'module'
 import { Types } from 'mongoose'
 import path from 'path'
 import {
@@ -29,6 +30,8 @@ import removeFiles from '../helpers/removeFiles.js'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
+
+const require = createRequire(import.meta.url)
 
 let payload: Payload
 let user: Record<string, unknown> & TypeWithID
@@ -779,6 +782,30 @@ describe('database', () => {
       }
     })
   })
+
+  describe('Schema generation', () => {
+    it('should generate schema', async () => {
+      // eslint-disable-next-line jest/no-conditional-in-test
+      if (payload.db.name === 'mongoose') {
+        return
+      }
+
+      const outputFile = path.resolve(dirname, 'generated-database-schema.ts')
+      await payload.db.generateSchema({ outputFile })
+
+      expect(existsSync(outputFile)).toBeTruthy()
+
+      const file = require(outputFile)
+
+      // Check for every table, should exist in both generated and in memory
+      for (const table in payload.db.tables) {
+        expect(file).toHaveProperty(table)
+      }
+
+      rmSync(outputFile)
+    })
+  })
+
   describe('drizzle: schema hooks', () => {
     it('should add tables with hooks', async () => {
       // eslint-disable-next-line jest/no-conditional-in-test
@@ -1108,21 +1135,5 @@ describe('database', () => {
 
     // Should stay the same ID
     expect(postShouldCreated.id).toBe(postShouldUpdated.id)
-  })
-
-  describe('Schema generation', () => {
-    it('should generate schema', async () => {
-      // eslint-disable-next-line jest/no-conditional-in-test
-      if (payload.db.name === 'mongoose') {
-        return
-      }
-
-      const outputFile = path.resolve(dirname, 'generated-database-schema.ts')
-      await payload.db.generateSchema({ outputFile })
-
-      expect(existsSync(outputFile)).toBeTruthy()
-
-      rmSync(outputFile)
-    })
   })
 })
