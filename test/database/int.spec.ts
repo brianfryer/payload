@@ -1113,7 +1113,7 @@ describe('database', () => {
   describe('Schema generation', () => {
     it('should generate schema', async () => {
       // eslint-disable-next-line jest/no-conditional-in-test
-      if (payload.db.name !== 'postgres') {
+      if (payload.db.name === 'mongoose') {
         return
       }
 

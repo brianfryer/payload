@@ -108,10 +108,11 @@ export function postgresAdapter(args: Args): DatabaseAdapterObj<PostgresAdapter>
       },
       fieldConstraints: {},
       generateSchema: createSchemaGenerator({
+        dbCredentials: {
+          url: args.pool.connectionString,
+        },
         defaultOutputFile: args.generateSchemaOutputFile,
         dialect: 'postgresql',
-        schemaFilter: args.schemaName ? `["${args.schemaName}"]` : undefined,
-        url: args?.pool?.connectionString,
       }),
       idType: postgresIDType,
       initializing,

@@ -10,6 +10,7 @@ import {
   create,
   createGlobal,
   createGlobalVersion,
+  createSchemaGenerator,
   createVersion,
   deleteMany,
   deleteOne,
@@ -99,6 +100,13 @@ export function vercelPostgresAdapter(args: Args = {}): DatabaseAdapterObj<Verce
         json: true,
       },
       fieldConstraints: {},
+      generateSchema: createSchemaGenerator({
+        dbCredentials: {
+          url: args.pool.connectionString,
+        },
+        defaultOutputFile: args.generateSchemaOutputFile,
+        dialect: 'postgresql',
+      }),
       idType: postgresIDType,
       indexes: new Set<string>(),
       initializing,

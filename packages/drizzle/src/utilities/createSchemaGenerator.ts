@@ -2,7 +2,7 @@ import type { GenerateSchema } from 'payload'
 
 import { execSync } from 'child_process'
 import { existsSync } from 'fs'
-import { readFile, rm, writeFile } from 'fs/promises'
+import { mkdir, readFile, rm, writeFile } from 'fs/promises'
 import { createRequire } from 'module'
 import os from 'os'
 import path from 'path'
@@ -14,35 +14,18 @@ const url = import.meta.url
 
 const require = createRequire(url)
 
-const drizzleBinPath = path.resolve(path.dirname(require.resolve('drizzle-kit')), 'bin.cjs')
+const drizzleKitPath = require.resolve('drizzle-kit')
 
-/**
- *
- */
-const formatedFile = (packageName: string, content: string) => {
+const drizzleBinPath = path.resolve(path.dirname(drizzleKitPath), 'bin.cjs')
+
+const formatSchemaFile = (packageName: string, content: string) => {
   let formatted = ''
 
   const imports = []
   const exports = []
 
-  let pgView = false
-
   for (const line of content.split('\n')) {
-    // SKIP pgView generation
-    if (pgView) {
-      if (line === '') {
-        pgView = false
-      } else {
-        continue
-      }
-    }
-
-    if (line.includes('pgView(')) {
-      pgView = true
-      continue
-    }
-
-    if (line.startsWith('import')) {
+    if (line.trim().startsWith('import')) {
       // skip import of schema from relations
       if (!line.includes(`"./schema"`)) {
         // replace with the proxy path
@@ -96,15 +79,13 @@ declare module "${packageName}/types" {
 }
 
 export const createSchemaGenerator = ({
+  dbCredentials,
   defaultOutputFile,
   dialect,
-  schemaFilter,
-  url,
 }: {
+  dbCredentials: Record<string, string>
   defaultOutputFile?: string
   dialect: string
-  schemaFilter?: string
-  url: string
 }): GenerateSchema => {
   return async function generateSchema(
     this: DrizzleAdapter,
@@ -112,29 +93,49 @@ export const createSchemaGenerator = ({
   ) {
     const tempDir = path.resolve(os.tmpdir(), uuid())
 
-    const hasPostgis = Boolean((this as any).extensions?.postgis)
+    const extensionsFilters = []
 
-    const drizzleArgs = {
-      dialect,
-      out: tempDir,
-      schemaFilter,
-      tablesFilter: hasPostgis ? '!spatial_ref_sys' : undefined,
-      url,
+    if ('extensions' in this && typeof this.extensions === 'object') {
+      for (const extension in this.extensions) {
+        if (this.extensions[extension]) {
+          extensionsFilters.push(`"${extension}"`)
+        }
+      }
     }
 
-    const command = Object.entries(drizzleArgs)
-      .reduce(
-        (acc, [key, value]) => {
-          if (value) {
-            acc.push(`--${key}=${value}`)
-          }
-          return acc
-        },
-        ['node', drizzleBinPath, 'pull'],
-      )
-      .join(' ')
+    const drizzleConfig = `
+import { createRequire } from 'module'
+const url = import.meta.url
+const require = createRequire(url)
+const { defineConfig } = require("${drizzleKitPath}")
+export default defineConfig({
+  dialect: "${dialect}",
+  dbCredentials: {
+${Object.entries(dbCredentials)
+  .filter(([_, val]) => Boolean(val))
+  .map(([key, value]) => `    ${key}: "${value}",`)
+  .join('\n')}
+  },
+  out: "${tempDir}",
+  ${extensionsFilters.length ? `extensionsFilters: [${extensionsFilters.join(', ')}],` : ''}
+  ${this.schemaName ? `schemaFilter: ["${this.schemaName}"],` : ''}
+});
+`
 
-    execSync(command, { stdio: 'inherit' })
+    const drizzleConfigPath = path.resolve(tempDir, 'drizzle.config.js')
+
+    await mkdir(tempDir, { recursive: true })
+
+    await writeFile(drizzleConfigPath, drizzleConfig, 'utf-8')
+
+    try {
+      execSync(`node ${drizzleBinPath} pull --config=${drizzleConfigPath}`, {
+        stdio: 'inherit',
+      })
+    } catch (e) {
+      this.payload.logger.error(e)
+      throw e
+    }
 
     this.payload.logger.info('Post processing...')
 
@@ -145,7 +146,7 @@ export const createSchemaGenerator = ({
 
     await rm(tempDir, { force: true, recursive: true })
 
-    const output = formatedFile(
+    const output = formatSchemaFile(
       this.packageName,
       `
 ${schema}

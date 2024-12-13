@@ -9,6 +9,7 @@ import type {
 import type { DrizzleAdapter } from '@payloadcms/drizzle/types'
 import type { VercelPool, VercelPostgresPoolConfig } from '@vercel/postgres'
 import type { DrizzleConfig } from 'drizzle-orm'
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres'
 import type { PgSchema, PgTableFn, PgTransactionConfig } from 'drizzle-orm/pg-core'
 
 export type Args = {
@@ -31,6 +32,8 @@ export type Args = {
    */
   disableCreateDatabase?: boolean
   extensions?: string[]
+  /** Generated schema from payload generate:db-schema file path */
+  generateSchemaOutputFile?: string
   idType?: 'serial' | 'uuid'
   localesSuffix?: string
   logger?: DrizzleConfig['logger']
@@ -57,7 +60,18 @@ export type Args = {
   versionsSuffix?: string
 }
 
+export interface GeneratedDatabaseSchema {
+  schemaUntyped: Record<string, unknown>
+}
+
+type ResolveSchemaType<T> = 'schema' extends keyof T
+  ? T['schema']
+  : GeneratedDatabaseSchema['schemaUntyped']
+
+type Drizzle = NodePgDatabase<ResolveSchemaType<GeneratedDatabaseSchema>>
+
 export type VercelPostgresAdapter = {
+  drizzle: Drizzle
   pool?: VercelPool
   poolOptions?: Args['pool']
 } & BasePostgresAdapter
@@ -69,7 +83,7 @@ declare module 'payload' {
     afterSchemaInit: PostgresSchemaHook[]
     beforeSchemaInit: PostgresSchemaHook[]
     beginTransaction: (options?: PgTransactionConfig) => Promise<null | number | string>
-    drizzle: PostgresDB
+    drizzle: Drizzle
     enums: Record<string, GenericEnum>
     extensions: Record<string, boolean>
     extensionsFilter: Set<string>

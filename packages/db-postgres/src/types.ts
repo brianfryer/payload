@@ -31,7 +31,7 @@ export type Args = {
    */
   disableCreateDatabase?: boolean
   extensions?: string[]
-  /** Path for generated with payload generate:db-schema drizzle schema */
+  /** Generated schema from payload generate:db-schema file path */
   generateSchemaOutputFile?: string
   idType?: 'serial' | 'uuid'
   localesSuffix?: string
@@ -55,11 +55,6 @@ export type Args = {
   versionsSuffix?: string
 }
 
-export type PostgresAdapter = {
-  pool: Pool
-  poolOptions: PoolConfig
-} & BasePostgresAdapter
-
 export interface GeneratedDatabaseSchema {
   schemaUntyped: Record<string, unknown>
 }
@@ -67,6 +62,13 @@ export interface GeneratedDatabaseSchema {
 type ResolveSchemaType<T> = 'schema' extends keyof T
   ? T['schema']
   : GeneratedDatabaseSchema['schemaUntyped']
+
+type Drizzle = NodePgDatabase<ResolveSchemaType<GeneratedDatabaseSchema>>
+export type PostgresAdapter = {
+  drizzle: Drizzle
+  pool: Pool
+  poolOptions: PoolConfig
+} & BasePostgresAdapter
 
 declare module 'payload' {
   export interface DatabaseAdapter
@@ -76,7 +78,7 @@ declare module 'payload' {
 
     beforeSchemaInit: PostgresSchemaHook[]
     beginTransaction: (options?: PgTransactionConfig) => Promise<null | number | string>
-    drizzle: NodePgDatabase<ResolveSchemaType<GeneratedDatabaseSchema>>
+    drizzle: Drizzle
     enums: Record<string, GenericEnum>
     extensions: Record<string, boolean>
     /**

@@ -11,6 +11,7 @@ import {
   create,
   createGlobal,
   createGlobalVersion,
+  createSchemaGenerator,
   createVersion,
   deleteMany,
   deleteOne,
@@ -93,6 +94,14 @@ export function sqliteAdapter(args: Args): DatabaseAdapterObj<SQLiteAdapter> {
         json: true,
       },
       fieldConstraints: {},
+      generateSchema: createSchemaGenerator({
+        dbCredentials: {
+          authToken: args.client.authToken,
+          url: args.client.url,
+        },
+        defaultOutputFile: args.generateSchemaOutputFile,
+        dialect: 'turso',
+      }),
       idType: postgresIDType,
       initializing,
       localesSuffix: args.localesSuffix || '_locales',
