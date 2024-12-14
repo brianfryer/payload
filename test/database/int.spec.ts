@@ -790,7 +790,7 @@ describe('database', () => {
         return
       }
 
-      const outputFile = path.resolve(dirname, 'generated-database-schema.ts')
+      const outputFile = path.resolve(dirname, 'generated-database-schema-test.ts')
       await payload.db.generateSchema({ outputFile })
 
       expect(existsSync(outputFile)).toBeTruthy()

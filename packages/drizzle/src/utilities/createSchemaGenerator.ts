@@ -205,13 +205,13 @@ ${Object.entries(dbCredentials)
       stdio: 'inherit',
     })
 
-    const [schema] = await Promise.all([
+    const [schema, relationships] = await Promise.all([
       readFile(path.resolve(tempDir, 'schema.ts'), 'utf-8'),
       /**
        * TODO: revise how we should handle relationships when names are completely different from what drizzle generates and what our "in memory" drizzle has.
        * With tables we name them in formatSchemaFile
        */
-      // readFile(path.resolve(tempDir, 'relations.ts'), 'utf-8'),
+      readFile(path.resolve(tempDir, 'relations.ts'), 'utf-8'),
     ])
 
     await rm(tempDir, { force: true, recursive: true })
@@ -220,6 +220,8 @@ ${Object.entries(dbCredentials)
       this.packageName,
       `
 ${schema}
+
+${relationships}
 `,
     )
 
