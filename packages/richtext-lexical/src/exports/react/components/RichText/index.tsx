@@ -20,7 +20,7 @@ export type JSXConvertersFunction<
     | SerializedInlineBlockNode<{ blockName?: null | string; blockType: string }>,
 > = (args: { defaultConverters: JSXConverters<DefaultNodeTypes> }) => JSXConverters<T>
 
-type RichTextProps = {
+type RichTextProps = React.HTMLAttributes<HTMLDivElement> & {
   /**
    * Additional class names for the container.
    */
@@ -49,6 +49,7 @@ export const RichText: React.FC<RichTextProps> = ({
   data: editorState,
   disableIndent,
   disableTextAlign,
+  ...rest
 }) => {
   if (!editorState) {
     return null
@@ -66,7 +67,7 @@ export const RichText: React.FC<RichTextProps> = ({
   }
 
   return (
-    <div className={className ?? 'payload-richtext'}>
+    <div className={className ?? 'payload-richtext'} {...rest}>
       {editorState &&
         !Array.isArray(editorState) &&
         typeof editorState === 'object' &&
